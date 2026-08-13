@@ -1,0 +1,370 @@
+<Application x:Class="PoeRedux.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <FontFamily x:Key="AppFont">Segoe UI Variable Text, Segoe UI</FontFamily>
+
+        <Color x:Key="BackgroundColor">#101216</Color>
+        <Color x:Key="SurfaceColor">#171A1F</Color>
+        <Color x:Key="SurfaceRaisedColor">#1D2026</Color>
+        <Color x:Key="SurfaceHoverColor">#242830</Color>
+        <Color x:Key="BorderColor">#30343D</Color>
+        <Color x:Key="AccentColor">#6D88B5</Color>
+        <Color x:Key="AccentHoverColor">#7E99C4</Color>
+        <Color x:Key="AccentMutedColor">#222B3A</Color>
+        <Color x:Key="TextPrimaryColor">#F0F1F3</Color>
+        <Color x:Key="TextSecondaryColor">#A0A5AE</Color>
+        <Color x:Key="TextDisabledColor">#676C75</Color>
+        <Color x:Key="SuccessColor">#6D88B5</Color>
+        <Color x:Key="DangerColor">#EF6B73</Color>
+
+        <SolidColorBrush x:Key="AppBackground" Color="{StaticResource BackgroundColor}"/>
+        <SolidColorBrush x:Key="Surface" Color="{StaticResource SurfaceColor}"/>
+        <SolidColorBrush x:Key="SurfaceRaised" Color="{StaticResource SurfaceRaisedColor}"/>
+        <SolidColorBrush x:Key="SurfaceHover" Color="{StaticResource SurfaceHoverColor}"/>
+        <SolidColorBrush x:Key="AppBorder" Color="{StaticResource BorderColor}"/>
+        <SolidColorBrush x:Key="Accent" Color="{StaticResource AccentColor}"/>
+        <SolidColorBrush x:Key="AccentHover" Color="{StaticResource AccentHoverColor}"/>
+        <SolidColorBrush x:Key="AccentMuted" Color="{StaticResource AccentMutedColor}"/>
+        <SolidColorBrush x:Key="TextPrimary" Color="{StaticResource TextPrimaryColor}"/>
+        <SolidColorBrush x:Key="TextSecondary" Color="{StaticResource TextSecondaryColor}"/>
+        <SolidColorBrush x:Key="TextDisabled" Color="{StaticResource TextDisabledColor}"/>
+        <SolidColorBrush x:Key="Success" Color="{StaticResource SuccessColor}"/>
+        <SolidColorBrush x:Key="Danger" Color="{StaticResource DangerColor}"/>
+
+        <!-- Compatibility aliases used by the secondary windows. -->
+        <SolidColorBrush x:Key="DarkBackground" Color="{StaticResource BackgroundColor}"/>
+        <SolidColorBrush x:Key="DarkSurface" Color="{StaticResource SurfaceRaisedColor}"/>
+        <SolidColorBrush x:Key="DarkBorder" Color="{StaticResource BorderColor}"/>
+        <SolidColorBrush x:Key="DarkTextPrimary" Color="{StaticResource TextPrimaryColor}"/>
+        <SolidColorBrush x:Key="DarkTextSecondary" Color="{StaticResource TextSecondaryColor}"/>
+        <SolidColorBrush x:Key="DarkTextDisabled" Color="{StaticResource TextDisabledColor}"/>
+
+        <Style TargetType="Window">
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
+            <Setter Property="TextOptions.TextRenderingMode" Value="ClearType"/>
+        </Style>
+
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource Surface}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AppBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="12"/>
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="{StaticResource Accent}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.82"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource SurfaceRaised}"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextDisabled}"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AppBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource SurfaceHover}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="CompactButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AppBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CaretBrush" Value="{StaticResource Accent}"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="Box" Width="18" Height="18"
+                                    CornerRadius="5"
+                                    Background="{StaticResource SurfaceRaised}"
+                                    BorderBrush="{StaticResource AppBorder}"
+                                    BorderThickness="1.5"
+                                    VerticalAlignment="Top"/>
+                            <Path x:Name="Check" Grid.Column="0"
+                                  Data="M 3,8 L 7,12 L 15,4"
+                                  Stroke="#15110B" StrokeThickness="2.2"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  Visibility="Collapsed"
+                                  Width="12" Height="10"
+                                  HorizontalAlignment="Center" VerticalAlignment="Top"
+                                  Margin="0,4,0,0"/>
+                            <ContentPresenter Grid.Column="1" Margin="10,0,0,0"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Box" Property="Background" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource AccentHover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PatchCardCheckBox" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Border x:Name="CardChrome"
+                                Background="{StaticResource SurfaceRaised}"
+                                BorderBrush="{StaticResource AppBorder}"
+                                BorderThickness="1"
+                                CornerRadius="7"
+                                Padding="10"
+                                Margin="3">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="20"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Margin="0,0,12,0"/>
+                                <Border x:Name="SelectRing" Grid.Column="1"
+                                        Width="18" Height="18" CornerRadius="9"
+                                        BorderBrush="{StaticResource AppBorder}"
+                                        BorderThickness="1.5" VerticalAlignment="Top">
+                                    <Ellipse x:Name="SelectedDot" Width="8" Height="8"
+                                             Fill="{StaticResource Accent}" Visibility="Collapsed"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CardChrome" Property="Background" Value="{StaticResource SurfaceHover}"/>
+                                <Setter TargetName="CardChrome" Property="BorderBrush" Value="#3A4962"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CardChrome" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="SelectRing" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="SelectedDot" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="RoundThumbStyle" TargetType="Thumb">
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Ellipse Fill="{StaticResource Accent}" Stroke="#FFF1D3" StrokeThickness="1"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="InvisibleTrackButton" TargetType="RepeatButton">
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="RoundGreySlider" TargetType="Slider">
+            <Setter Property="MinHeight" Value="26"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid>
+                            <Border Height="5" Background="{StaticResource AppBorder}" CornerRadius="3" VerticalAlignment="Center"/>
+                            <Track x:Name="PART_Track" VerticalAlignment="Center">
+                                <Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource InvisibleTrackButton}"/></Track.DecreaseRepeatButton>
+                                <Track.Thumb><Thumb Style="{StaticResource RoundThumbStyle}"/></Track.Thumb>
+                                <Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource InvisibleTrackButton}"/></Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ProgressBar">
+            <Setter Property="Height" Value="4"/>
+            <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+            <Setter Property="Background" Value="{StaticResource AppBorder}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <Style x:Key="ScrollBarThumb" TargetType="Thumb">
+            <Setter Property="Template">
+                <Setter.Value><ControlTemplate TargetType="Thumb"><Border Background="#46536A" CornerRadius="4"/></ControlTemplate></Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Width" Value="8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Track x:Name="PART_Track" IsDirectionReversed="True">
+                            <Track.Thumb><Thumb Style="{StaticResource ScrollBarThumb}"/></Track.Thumb>
+                        </Track>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Horizontal"><Setter Property="Height" Value="8"/><Setter Property="Width" Value="Auto"/></Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DarkScrollViewer" TargetType="ScrollViewer">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+
+        <Style x:Key="DarkComboBoxItem" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="6">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{StaticResource SurfaceHover}"/></Trigger>
+                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentMuted}"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DarkComboBox" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="Background" Value="{StaticResource SurfaceRaised}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AppBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItem}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9"/>
+                            <ToggleButton Background="Transparent" BorderThickness="0" Focusable="False"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <Grid Background="Transparent">
+                                    <Path Data="M 0 0 L 5 5 L 10 0" Stroke="{StaticResource TextSecondary}" StrokeThickness="1.8"
+                                          Width="10" Height="5" HorizontalAlignment="Right" Margin="0,0,12,0"/>
+                                </Grid>
+                            </ToggleButton>
+                            <ContentPresenter Content="{TemplateBinding SelectionBoxItem}" Margin="12,0,32,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                            <Popup x:Name="PART_Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" AllowsTransparency="True" PopupAnimation="Fade">
+                                <Border Background="{StaticResource SurfaceRaised}" BorderBrush="{StaticResource AppBorder}" BorderThickness="1" CornerRadius="9" MinWidth="{TemplateBinding ActualWidth}" Margin="0,4,0,0" Padding="4">
+                                    <ScrollViewer MaxHeight="300"><StackPanel IsItemsHost="True"/></ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="#495873"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="GroupBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+    </Application.Resources>
+</Application>
