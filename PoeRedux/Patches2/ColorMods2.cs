@@ -79,14 +79,11 @@ public class ColorMods2 : IPatch
         new ColorModsOption("map_map_item_drop_chance_+%", "blue", true),
     };
 
-    private readonly Dictionary<string, string> _color_conversions = new()
-    {
-        { "red", "rgb(209,46,46)" },
-        { "green", "rgb(74,230,58)" },
-        { "blue", "rgb(14,186,255)" },
-        { "yellow", "rgb(255,204,27)" },
-        { "pink", "rgb(227,158,255)" },
-    };
+    public Dictionary<string, string> GroupColors { get; set; } =
+        ModColorGroups.Defaults.ToDictionary(
+            group => group.Name,
+            group => $"rgb({group.R},{group.G},{group.B})", StringComparer.Ordinal);
+
     private enum ReadState
     {
         WritingData,
@@ -162,7 +159,7 @@ public class ColorMods2 : IPatch
                 string modType = description[1];
 
                 if (ColorModsOptions.FirstOrDefault(x => x.Name == modType) is ColorModsOption option
-                    && _color_conversions.TryGetValue(option.Color.ToLower(), out string? annotation))
+                    && GroupColors.TryGetValue(ModColorGroups.Normalize(option.Color), out string? annotation))
                 {
                     currentAnnotation = annotation;
                     currentIsEnabled = option.IsEnabled;

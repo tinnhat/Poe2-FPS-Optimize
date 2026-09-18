@@ -18,6 +18,22 @@ public abstract class SelectiveFxReducer : IPatch
     protected virtual byte[] GetReplacement(string fileName) =>
         [.. Encoding.Unicode.GetPreamble(), .. Encoding.Unicode.GetBytes("0")];
 
+    public void ValidateTargets(DirectoryNode root)
+    {
+        var directory = NavigateTo(root, RootPath) ??
+            throw new InvalidDataException($"Could not find {string.Join('/', RootPath)} in the selected game data.");
+        if (!HasTarget(directory))
+            throw new InvalidDataException($"{Name} found no supported particle or trail files; no files were changed.");
+    }
+
+    private bool HasTarget(DirectoryNode directory) => directory.Children.Any(node => node switch
+    {
+        DirectoryNode child => HasTarget(child),
+        FileNode file => HasSupportedExtension(file.Name) &&
+            ShouldReduce((file.Record.Path ?? string.Empty).Replace('\\', '/').ToLowerInvariant()),
+        _ => false
+    });
+
     public void Apply(DirectoryNode root)
     {
         var directory = NavigateTo(root, RootPath) ??

@@ -421,20 +421,16 @@ client
         string patched = data
                 .Replace("\"fog\"", "\"xog\"")
                 .Replace("\"screenspace_fog\"", "\"xcreenspace_fog\"")
-                .Replace("\"post_processing\"", "\"xost_processing\"")
-                .Replace("\"post_transform\"", "\"xost_transform\"")
                 .Replace("\"effect_spawner\"", "\"xffect_spawner\"");
 
-        // A Delirium environment can point to a generically named weather AO
-        // which still contains screen-space fog. Clear the attachment for every
-        // environment already classified as Delirium by PatchEnvironmentSettings.
+        // Detach only explicitly named fog objects. Generic environment AOs may
+        // carry lighting and must remain connected.
         patched = Regex.Replace(patched,
-            "(?i)(?<prefix>\"player_environment_ao\"\\s*:\\s*)\"[^\"]*\"",
-            "${prefix}\"\"");
+            "(?i)(?<prefix>\"player_environment_ao\"\\s*:\\s*)\"(?<path>[^\"]*)\"",
+            match => Regex.IsMatch(match.Groups["path"].Value, "fog|mist|smoke|delirium", RegexOptions.IgnoreCase)
+                ? match.Groups["prefix"].Value + "\"\""
+                : match.Value);
 
-        patched = Regex.Replace(patched,
-            "(?i)(?<prefix>\"desaturation\"\\s*:\\s*)[-+0-9.eE]+",
-            "${prefix}0.0");
         return patched;
     }
 }

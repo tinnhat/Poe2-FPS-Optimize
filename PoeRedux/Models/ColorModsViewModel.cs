@@ -12,7 +12,7 @@ public class ColorModsViewModel : INotifyPropertyChanged
     public ColorModsOption Option { get; }
     public string Name => Option.Name;
 
-    public List<string> AvailableColors { get; } = new() { "red", "green", "blue", "yellow", "pink" };
+    public IReadOnlyList<string> AvailableColors => Services.ModColorGroups.Names;
 
     public bool IsSelected
     {
@@ -44,7 +44,7 @@ public class ColorModsViewModel : INotifyPropertyChanged
     {
         Option = option;
         _isSelected = option.IsEnabled;
-        _selectedColor = option.Color;
+        _selectedColor = Services.ModColorGroups.Normalize(option.Color);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

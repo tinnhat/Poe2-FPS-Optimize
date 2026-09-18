@@ -14,6 +14,8 @@ A customized, PoE 2-only build of PoeRedux focused on safer visual-performance p
 
 - Modern, scalable dark interface with English and Vietnamese support.
 - Remembers the selected interface language between sessions.
+- Remembers the game file, selected patches, and camera zoom between sessions.
+- Remembers color groups and individual Visual Noise choices; use the gear button to configure a patch.
 - One-file, self-contained Windows executable.
 - PoE 2 only; legacy PoE 1 menu and workflow are not included.
 - Backs up original GGPK entries before writing and can restore them from the app.
@@ -21,15 +23,20 @@ A customized, PoE 2-only build of PoeRedux focused on safer visual-performance p
 ### Available patches
 
 - Camera zoom and full minimap reveal.
-- Reduced monster non-combat effects.
-- Reduced player-skill particles while preserving danger indicators.
-- Safe residual-smoke removal for selected boss-death and harmless skill effects.
+- Combined monster ambient and player-skill particle reduction while preserving danger indicators.
+- Selected harmless smoke and trail reduction.
 - Safe MTX particle and trail reduction.
 - Corpse removal, including small monsters.
-- Map-mod colors and always-visible monster HP.
-- Atlas fog, environment fog, rain, cloud, environment-FX, shadow, and light reduction.
+- Named map-mod color groups with editable shared colors, compact tooltip mod lines, and always-visible monster HP.
+- Environment fog and a separate rain/cloud weather option, while preserving environment lighting.
+- Decorative vignette and depth-of-field reduction, plus optional loading-artwork hiding.
 - Delirium fog fix covering environment fog, mirror-activation smoke, blur, shimmer, and player haze.
-- Green-foliage material repair for data damaged by the retired clutter-removal option.
+
+The former blanket light and shadow patches are not offered. Lighting, exposure, tone mapping, and low-life/chill screen cues remain enabled. Restore previously patched game data before evaluating the new visual options; the app cannot infer which old options were applied to an existing GGPK.
+
+The compact tooltip and loading-artwork patches originated from [PoeRedux PR #47](https://github.com/Gineticus/PoeRedux/pull/47). Its author had not tested PoE 2; these options reject unfamiliar data layouts, and in-game visual validation is still required.
+
+Run the focused checks with `dotnet test PoeRedux.Tests/PoeRedux.Tests.csproj`. These checks cover preservation of lighting and gameplay screen cues, loading-artwork rewrites, and DAT string writes. They do not measure brightness inside the game.
 
 Gameplay-critical visuals such as poison clouds, ground effects, projectiles, AoE markers, and danger telegraphs are intentionally preserved by the safe reducers.
 
@@ -66,6 +73,8 @@ File verification restores original game data and removes applied GGPK patches.
 
 - Giao diện tối hiện đại, hỗ trợ tiếng Anh và tiếng Việt.
 - Tự ghi nhớ ngôn ngữ đã chọn giữa các lần chạy.
+- Tự ghi nhớ file game, các patch đã chọn và mức zoom camera giữa các lần chạy.
+- Ghi nhớ nhóm màu và lựa chọn Visual Noise; bấm nút bánh răng để cấu hình từng patch.
 - Chỉ cần một file `.exe`, không phải cài thêm .NET.
 - Đã loại bỏ menu và quy trình dành cho PoE 1.
 - Tự sao lưu dữ liệu GGPK gốc trước khi ghi và hỗ trợ khôi phục ngay trong app.
@@ -73,15 +82,18 @@ File verification restores original game data and removes applied GGPK patches.
 ### Các patch hiện có
 
 - Mở rộng camera và mở toàn bộ minimap.
-- Giảm hiệu ứng phụ của quái.
-- Giảm particle skill người chơi nhưng giữ dấu hiệu nguy hiểm.
-- Xóa có chọn lọc khói sau khi boss chết và các trail skill vô hại.
+- Gộp giảm particle idle của quái và particle skill phụ, giữ dấu hiệu nguy hiểm.
+- Giảm khói và trail vô hại có chọn lọc.
 - Giảm particle và trail MTX.
 - Xóa xác của cả quái lớn và quái nhỏ.
-- Tô màu mod bản đồ và luôn hiển thị HP quái.
-- Giảm fog Atlas, fog môi trường, mưa, mây, environment FX, bóng đổ và ánh sáng.
+- Nhóm màu mod có tên và màu chung tùy chỉnh, rút gọn dòng mod trên tooltip, luôn hiển thị HP quái.
+- Giảm fog môi trường và mưa/mây trong các mục riêng, giữ ánh sáng môi trường.
+- Giảm vignette và làm mờ độ sâu, tùy chọn ẩn hình nền tải màn.
 - Xử lý fog Delirium, khói khi chạm mirror, blur, shimmer và lớp haze trên người chơi.
-- Sửa material cây cối bị xanh do tùy chọn xóa vật thể cũ gây ra.
+
+Đã bỏ patch tắt toàn bộ ánh sáng và bóng đổ. Ánh sáng, exposure, tone mapping và tín hiệu màn hình khi máu thấp/chill được giữ lại. Hãy khôi phục dữ liệu game đã patch trước khi đánh giá các mục hình ảnh mới; app không thể tự biết tùy chọn cũ nào đã ghi vào GGPK.
+
+Patch rút gọn tooltip và ẩn hình nền tải màn dựa trên [PoeRedux PR #47](https://github.com/Gineticus/PoeRedux/pull/47). Tác giả PR chưa thử trên PoE 2; các patch này sẽ từ chối cấu trúc dữ liệu lạ và vẫn cần kiểm tra hình ảnh trực tiếp trong game.
 
 Các hiệu ứng quan trọng cho gameplay như poison cloud, ground effect, projectile, AoE marker và cảnh báo nguy hiểm được chủ động giữ lại.
 

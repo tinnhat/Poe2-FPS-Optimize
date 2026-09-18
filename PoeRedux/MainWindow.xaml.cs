@@ -9,6 +9,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Data;
 using PoeRedux.Patches.Black;
 
 namespace PoeRedux;
@@ -17,6 +18,7 @@ public partial class MainWindow : Window
 {
     private readonly ObservableCollection<PatchViewModel> _patches;
     private readonly ObservableCollection<ColorModsViewModel> _colorMods;
+    private readonly ObservableCollection<ColorGroupViewModel> _colorGroups;
     private string _ggpkPath = string.Empty;
     private double _cameraZoom = 2.4;
     private string? _updateDownloadUrl;
@@ -27,9 +29,15 @@ public partial class MainWindow : Window
     {
         _patches = new ObservableCollection<PatchViewModel>();
         _colorMods = new ObservableCollection<ColorModsViewModel>();
+        _colorGroups = new ObservableCollection<ColorGroupViewModel>(
+            ModColorGroups.Defaults.Select(group => new ColorGroupViewModel(
+                group.Name, $"#{group.R:X2}{group.G:X2}{group.B:X2}")));
         InitializeComponent();
         PatchesItemsControl.ItemsSource = _patches;
         InitializePoe2Patches();
+        CollectionViewSource.GetDefaultView(_patches).GroupDescriptions.Add(
+            new PropertyGroupDescription(nameof(PatchViewModel.Category)));
+        RestoreSessionSettings();
         LanguageComboBox.SelectedIndex = LocalizationService.CurrentLanguage == AppLanguage.Vietnamese ? 1 : 0;
         ApplyLocalization();
         _languageUiReady = true;
@@ -40,6 +48,7 @@ public partial class MainWindow : Window
             UpdateRestoreButtonState();
             await CheckForUpdatesAsync();
         };
+        Closing += (_, _) => SaveSessionSettings();
     }
 
     private void ApplyDarkTitleBar()
@@ -62,24 +71,20 @@ public partial class MainWindow : Window
     {
         var patchInstances = new IPatch[]
         {
+            new ColorMods2(),
+            new ClientStrings(),
+            new MonsterHP(),
             new Camera(),
             new Minimap(),
-            new MonsterAmbientFxReducer(),
-            new SafePlayerSkillFxReducer(),
-            new ResidualSmoke(),
+            new VisualNoiseParticles(),
+            new VisualNoiseEffects(),
             new SafeMtxParticleReducer(),
-            new DecorativeClutter(),
             new Corpse(),
-            new ColorMods2(),
-            new MonsterHP(),
-            new AtlasFog(),
             new Fog(),
-            new Rain(),
-            new Clouds(),
             new EnvironmentParticles2(),
-            new Shadow(),
-            new Light(),
+            new PostProcessFilters(),
             new Delirium(),
+            new LoadingScreen(),
             // new Aoc(),
             // new Env(),
             // new Epk(),
@@ -98,13 +103,80 @@ public partial class MainWindow : Window
                 if (args.PropertyName == nameof(PatchViewModel.IsSelected)) UpdateSelectionSummary();
             };
             _patches.Add(viewModel);
-            if (patch is ColorMods2 colorModsPatch)            {
+            if (patch is ColorMods2 colorModsPatch)
+            {
                 foreach (var option in colorModsPatch.ColorModsOptions)
                 {
                     _colorMods.Add(new ColorModsViewModel(option.Copy()));
                 }
             }
         }
+    }
+
+    private void RestoreSessionSettings()
+    {
+        var settings = SessionSettings.Load();
+        if (settings is null) return;
+
+        if (File.Exists(settings.GamePath) &&
+            (settings.GamePath.EndsWith(".ggpk", StringComparison.OrdinalIgnoreCase) ||
+             settings.GamePath.EndsWith(".bin", StringComparison.OrdinalIgnoreCase)))
+            GgpkPathTextBox.Text = settings.GamePath;
+
+        if (double.IsFinite(settings.CameraZoom))
+            ZoomSlider.Value = Math.Clamp(settings.CameraZoom, ZoomSlider.Minimum, ZoomSlider.Maximum);
+
+        var selectedNames = new HashSet<string>(settings.SelectedPatches ?? [], StringComparer.Ordinal);
+        foreach (var patch in _patches)
+            patch.IsSelected = selectedNames.Contains(patch.Patch.Name);
+        if (settings.GroupColors is not null)
+            foreach (var group in _colorGroups)
+                if (settings.GroupColors.TryGetValue(group.Name, out var hex) &&
+                    System.Text.RegularExpressions.Regex.IsMatch(hex ?? "", "^#[0-9a-fA-F]{6}$"))
+                    group.Hex = hex!;
+        if (settings.ModColors is not null)
+            foreach (var mod in _colorMods)
+                if (settings.ModColors.TryGetValue(mod.Name, out var saved) && saved is not null)
+                {
+                    mod.IsSelected = saved.Enabled;
+                    mod.SelectedColor = ModColorGroups.Normalize(saved.Group ?? "");
+                    mod.Option.IsEnabled = mod.IsSelected;
+                    mod.Option.Color = mod.SelectedColor;
+                }
+        if (settings.PatchOptions is not null)
+            foreach (var viewModel in _patches)
+                if (viewModel.Patch is IConfigurablePatch configurable &&
+                    settings.PatchOptions.TryGetValue(viewModel.Patch.Name, out var saved) && saved is not null)
+                {
+                    var enabled = configurable.Options.Count(option =>
+                        saved.TryGetValue(option.Id, out var value) ? value : option.IsEnabled);
+                    if (enabled == 0) continue;
+                    foreach (var option in configurable.Options)
+                        if (saved.TryGetValue(option.Id, out var value)) option.IsEnabled = value;
+                }
+    }
+
+    private void SaveSessionSettings()
+    {
+        new SessionSettings(
+            _ggpkPath,
+            _cameraZoom,
+            _patches.Where(patch => patch.IsSelected).Select(patch => patch.Patch.Name).ToArray(),
+            _colorGroups.ToDictionary(group => group.Name, group => group.Hex),
+            _colorMods.ToDictionary(mod => mod.Name,
+                mod => new ColorModSetting(mod.Option.IsEnabled, mod.Option.Color)),
+            _patches.Where(viewModel => viewModel.Patch is IConfigurablePatch)
+                .ToDictionary(viewModel => viewModel.Patch.Name,
+                    viewModel => ((IConfigurablePatch)viewModel.Patch).Options
+                        .ToDictionary(option => option.Id, option => option.IsEnabled))
+        ).Save();
+    }
+
+    private void PatchOptionsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button { DataContext: PatchViewModel viewModel } &&
+            viewModel.Patch is IConfigurablePatch configurable)
+            new PatchOptionsWindow(viewModel.Name, configurable).ShowDialog();
     }
 
     private void LanguageComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -136,6 +208,7 @@ public partial class MainWindow : Window
         StatusLabelText.Text = LocalizationService.Text("Status");
         ApplyButton.Content = LocalizationService.Text("ApplySelected");
         foreach (PatchViewModel patch in _patches) patch.RefreshLanguage();
+        CollectionViewSource.GetDefaultView(_patches).Refresh();
         UpdateSelectionSummary();
         UpdateRestoreButtonState();
         UpdateStatus();
@@ -152,7 +225,9 @@ public partial class MainWindow : Window
 
     private void ModsColorsButton_Click(object sender, RoutedEventArgs e)
     {
-        var result = ColorModsEditor.Show(_colorMods);
+        var editedGroups = new ObservableCollection<ColorGroupViewModel>(
+            _colorGroups.Select(group => new ColorGroupViewModel(group.Name, group.Hex)));
+        var result = ColorModsEditor.Show(_colorMods, editedGroups);
         if (result == true)
         {
             foreach (var colorMod in _colorMods)
@@ -160,13 +235,15 @@ public partial class MainWindow : Window
                 colorMod.Option.Color = colorMod.SelectedColor;
                 colorMod.Option.IsEnabled = colorMod.IsSelected;
             }
+            foreach (var group in _colorGroups)
+                group.Hex = editedGroups.First(edited => edited.Name == group.Name).Hex;
         }
         else
         {
             foreach (var colorMod in _colorMods)
             {
                 colorMod.IsSelected = colorMod.Option.IsEnabled;
-                colorMod.SelectedColor = colorMod.Option.Color;
+                colorMod.SelectedColor = ModColorGroups.Normalize(colorMod.Option.Color);
             }
         }
     }
@@ -233,6 +310,9 @@ public partial class MainWindow : Window
             if (patch.Patch is ColorMods2 colorModsPatch2)
             {
                 colorModsPatch2.ColorModsOptions = _colorMods.Select(cm => cm.Option.Copy()).ToList();
+                colorModsPatch2.GroupColors = _colorGroups.ToDictionary(
+                    group => group.Name,
+                    group => $"rgb({Convert.ToInt32(group.Hex.Substring(1, 2), 16)},{Convert.ToInt32(group.Hex.Substring(3, 2), 16)},{Convert.ToInt32(group.Hex.Substring(5, 2), 16)})");
             }
         }
 
@@ -450,7 +530,9 @@ public partial class MainWindow : Window
         }
         else
         {
-            StatusTextBlock.Text = LocalizationService.Format("Ready", Path.GetFileName(_ggpkPath));
+            StatusTextBlock.Text = BackupManager.HasBackup()
+                ? LocalizationService.Text("BackupReviewStatus")
+                : LocalizationService.Format("Ready", Path.GetFileName(_ggpkPath));
         }
     }
 

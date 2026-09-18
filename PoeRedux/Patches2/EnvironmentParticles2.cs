@@ -6,10 +6,15 @@ using System.Text.RegularExpressions;
 
 namespace PoeRedux.Patches;
 
-public sealed class EnvironmentParticles2 : IPatch
+public sealed class EnvironmentParticles2 : IPatch, IConfigurablePatch
 {
-    public string Name => "Environment FX Patch";
-    public object Description => "Disables environment attachments, effect spawners, rain, clouds, and environment post-processing without modifying gameplay effect objects.";
+    public string Name => "Weather FX Patch";
+    public object Description => "Reduces rain and clouds while preserving environment effect spawners, lighting, fog attachments, and post-processing.";
+    public IList<PatchOption> Options { get; } =
+    [
+        new("rain", "Rain"),
+        new("clouds", "Clouds")
+    ];
 
     public void Apply(DirectoryNode root)
     {
@@ -18,19 +23,23 @@ public sealed class EnvironmentParticles2 : IPatch
 
         int candidates = 0;
         int changed = 0;
-        PatchDirectory(directory, ref candidates, ref changed);
+        bool rain = Options.First(option => option.Id == "rain").IsEnabled;
+        bool clouds = Options.First(option => option.Id == "clouds").IsEnabled;
+        if (!rain && !clouds)
+            throw new InvalidOperationException("Select at least one weather effect.");
+        PatchDirectory(directory, rain, clouds, ref candidates, ref changed);
 
         if (candidates == 0)
             throw new InvalidDataException("No supported PoE 2 environment settings were found; the game data layout may have changed.");
     }
 
-    private static void PatchDirectory(DirectoryNode directory, ref int candidates, ref int changed)
+    private static void PatchDirectory(DirectoryNode directory, bool rain, bool clouds, ref int candidates, ref int changed)
     {
         foreach (var node in directory.Children)
         {
             if (node is DirectoryNode subdirectory)
             {
-                PatchDirectory(subdirectory, ref candidates, ref changed);
+                PatchDirectory(subdirectory, rain, clouds, ref candidates, ref changed);
                 continue;
             }
 
@@ -38,7 +47,7 @@ public sealed class EnvironmentParticles2 : IPatch
                 continue;
 
             string data = Encoding.Unicode.GetString(file.Record.Read().ToArray()).TrimStart('\uFEFF');
-            string patched = PatchEnvironmentText(data, ref candidates);
+            string patched = PatchEnvironmentText(data, ref candidates, rain, clouds);
             if (patched == data) continue;
 
             BackupManager.RecordOriginal(file.Record);
@@ -48,26 +57,12 @@ public sealed class EnvironmentParticles2 : IPatch
         }
     }
 
-    internal static string PatchEnvironmentText(string data, ref int candidates)
+    internal static string PatchEnvironmentText(string data, ref int candidates, bool rain = true, bool clouds = true)
     {
-        string patched = data
-            .Replace("\"fog\"", "\"xog\"")
-            .Replace("\"screenspace_fog\"", "\"xcreenspace_fog\"")
-            .Replace("\"effect_spawner\"", "\"xffect_spawner\"")
-            .Replace("\"post_processing\"", "\"xost_processing\"");
+        string patched = data;
 
-        int attachmentCandidates = 0;
-        patched = Regex.Replace(patched,
-            "(?i)(?<prefix>\\\"player_environment_ao\\\"\\s*:\\s*)\\\"(?<value>[^\\\"]*)\\\"",
-            match =>
-            {
-                attachmentCandidates++;
-                return match.Groups["prefix"].Value + "\"\"";
-            });
-        candidates += attachmentCandidates;
-
-        patched = SetNumericPropertyToZero(patched, "clouds_intensity", ref candidates);
-        patched = SetNumericPropertyToZero(patched, "rain_intensity", ref candidates);
+        if (clouds) patched = SetNumericPropertyToZero(patched, "clouds_intensity", ref candidates);
+        if (rain) patched = SetNumericPropertyToZero(patched, "rain_intensity", ref candidates);
         return patched;
     }
 

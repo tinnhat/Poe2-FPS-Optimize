@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using PoeRedux.Patches;
 using PoeRedux.Services;
+using System.Windows;
 
 namespace PoeRedux.Models;
 
@@ -13,6 +14,13 @@ public class PatchViewModel : INotifyPropertyChanged
     public string Name => LocalizationService.PatchName(Patch.Name);
     public string Description => LocalizationService.PatchDescription(
         Patch.Name, Patch.Description?.ToString() ?? string.Empty);
+    public string Category => LocalizationService.Text(Patch switch
+    {
+        ColorMods2 or ClientStrings or MonsterHP => "ReadabilityCategory",
+        Camera or Minimap => "MapCameraCategory",
+        _ => "VisualNoiseCategory"
+    });
+    public Visibility OptionsVisibility => Patch is IConfigurablePatch ? Visibility.Visible : Visibility.Collapsed;
 
     public bool IsSelected
     {
@@ -39,6 +47,7 @@ public class PatchViewModel : INotifyPropertyChanged
     {
         OnPropertyChanged(nameof(Name));
         OnPropertyChanged(nameof(Description));
+        OnPropertyChanged(nameof(Category));
     }
 
     protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)

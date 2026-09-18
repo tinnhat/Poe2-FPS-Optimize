@@ -10,10 +10,15 @@ namespace PoeRedux;
 
 public partial class ColorModsEditor : Window
 {
-    public ColorModsEditor(ObservableCollection<ColorModsViewModel> colorMods)
+    private readonly ObservableCollection<ColorGroupViewModel> _groups;
+
+    public ColorModsEditor(ObservableCollection<ColorModsViewModel> colorMods,
+        ObservableCollection<ColorGroupViewModel> groups)
     {
+        _groups = groups;
         InitializeComponent();
         ColorModsItemsControl.ItemsSource = colorMods;
+        ColorGroupsItemsControl.ItemsSource = groups;
         ApplyLocalization();
         SourceInitialized += (s, e) => ApplyDarkTitleBar();
     }
@@ -23,6 +28,7 @@ public partial class ColorModsEditor : Window
         Title = LocalizationService.Text("ColorEditorTitle");
         EditorTitleText.Text = LocalizationService.Text("ColorEditorTitle");
         EditorDescriptionText.Text = LocalizationService.Text("ColorEditorDescription");
+        GroupsTitleText.Text = LocalizationService.Text("ColorGroupsTitle");
         SaveConfigButton.Content = LocalizationService.Text("SaveConfig");
         LoadConfigButton.Content = LocalizationService.Text("LoadConfig");
         SaveButton.Content = LocalizationService.Text("Save");
@@ -47,6 +53,12 @@ public partial class ColorModsEditor : Window
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_groups.Any(group => !System.Text.RegularExpressions.Regex.IsMatch(
+            group.Hex ?? "", "^#[0-9a-fA-F]{6}$")))
+        {
+            MessageBox.Show(LocalizationService.Text("InvalidGroupColor"), LocalizationService.Text("Error"));
+            return;
+        }
         DialogResult = true;
         Close();
     }
@@ -82,6 +94,7 @@ public partial class ColorModsEditor : Window
                     color = mod.SelectedColor,
                 };
             }
+            colorModsDict["__groups"] = _groups.ToDictionary(group => group.Name, group => group.Hex);
             var options = new System.Text.Json.JsonSerializerOptions 
             { 
                 WriteIndented = true,
@@ -114,6 +127,12 @@ public partial class ColorModsEditor : Window
                 var colorModsDict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, System.Text.Json.JsonElement>>>(json);
                 if (colorModsDict != null)
                 {
+                    if (colorModsDict.TryGetValue("__groups", out var groupData))
+                        foreach (var group in _groups)
+                            if (groupData.TryGetValue(group.Name, out var value) &&
+                                value.ValueKind == System.Text.Json.JsonValueKind.String &&
+                                System.Text.RegularExpressions.Regex.IsMatch(value.GetString() ?? "", "^#[0-9a-fA-F]{6}$"))
+                                group.Hex = value.GetString()!;
                     foreach (var mod in colorMods)
                     {
                         if (colorModsDict.TryGetValue(mod.Name, out var modData))
@@ -126,7 +145,7 @@ public partial class ColorModsEditor : Window
                             if (modData.TryGetValue("color", out var colorObj) 
                                 && colorObj.ValueKind == System.Text.Json.JsonValueKind.String)
                             {
-                                mod.SelectedColor = colorObj.GetString() ?? string.Empty;
+                                mod.SelectedColor = ModColorGroups.Normalize(colorObj.GetString() ?? string.Empty);
                             }
                         }
                     }
@@ -140,9 +159,10 @@ public partial class ColorModsEditor : Window
         }
     }
 
-    public static bool Show(ObservableCollection<ColorModsViewModel> colorMods)
+    public static bool Show(ObservableCollection<ColorModsViewModel> colorMods,
+        ObservableCollection<ColorGroupViewModel> groups)
     {
-        var dialog = new ColorModsEditor(colorMods);
+        var dialog = new ColorModsEditor(colorMods, groups);
 
         if (Application.Current.MainWindow != null)
         {
