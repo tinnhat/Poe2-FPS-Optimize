@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="PoeRedux"
-        Width="800" Height="580" MinWidth="720" MinHeight="500"
+        Width="800" Height="600" MinWidth="700" MinHeight="500"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource AppBackground}">
     <Grid Margin="14">
@@ -82,8 +82,9 @@
 
         <!-- Grouped patch list -->
         <Border Grid.Row="3" Style="{StaticResource Card}" Padding="5">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Style="{StaticResource DarkScrollViewer}">
-                <ItemsControl x:Name="PatchesItemsControl" Margin="-1">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          Style="{StaticResource DarkScrollViewer}">
+                <ItemsControl x:Name="PatchesItemsControl">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><StackPanel/></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
@@ -91,27 +92,24 @@
                         <GroupStyle>
                             <GroupStyle.HeaderTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding Name}" Margin="9,12,0,5" FontSize="12" FontWeight="Bold"
+                                    <TextBlock Text="{Binding Name}" Margin="10,11,0,4" FontSize="11" FontWeight="Bold"
                                                Foreground="{StaticResource TextPrimary}"/>
                                 </DataTemplate>
                             </GroupStyle.HeaderTemplate>
                             <GroupStyle.Panel>
-                                <ItemsPanelTemplate><UniformGrid Columns="2"/></ItemsPanelTemplate>
+                                <ItemsPanelTemplate><StackPanel/></ItemsPanelTemplate>
                             </GroupStyle.Panel>
                         </GroupStyle>
                     </ItemsControl.GroupStyle>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Grid>
+                            <Grid Margin="0,0,2,0" ToolTip="{Binding Description}">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <CheckBox IsChecked="{Binding IsSelected}" Style="{StaticResource PatchCardCheckBox}">
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="11.5" Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap"/>
-                                        <TextBlock Text="{Binding Description}" Margin="0,3,0,0" Foreground="{StaticResource TextSecondary}"
-                                                   TextWrapping="Wrap" FontSize="9.5" LineHeight="12.5" MaxHeight="27" ClipToBounds="True"/>
-                                    </StackPanel>
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="11.5"
+                                               Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
                                 </CheckBox>
-                                <Button Grid.Column="1" Content="⚙" Width="29" Height="29" Margin="0,6,5,0" VerticalAlignment="Top"
+                                <Button Grid.Column="1" Content="⚙" Width="32" Height="32" Margin="2,2,4,0" VerticalAlignment="Center"
                                         Visibility="{Binding OptionsVisibility}" Click="PatchOptionsButton_Click"
                                         Style="{StaticResource CompactButton}"/>
                             </Grid>
@@ -128,7 +126,8 @@
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock x:Name="StatusLabelText" Text="STATUS" Foreground="{StaticResource TextDisabled}" FontSize="8" FontWeight="SemiBold"/>
-                    <TextBlock x:Name="StatusTextBlock" Text="Select a game file to begin." Foreground="{StaticResource TextPrimary}" FontSize="10.5" Margin="0,1,0,0"/>
+                    <TextBlock x:Name="StatusTextBlock" Text="Select a game file to begin." Foreground="{StaticResource TextPrimary}"
+                               FontSize="10.5" Margin="0,1,8,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
                     <TextBlock x:Name="SafetyTitleText" Visibility="Collapsed"/>
                     <TextBlock x:Name="SafetyDescriptionText" Visibility="Collapsed"/>
                 </StackPanel>

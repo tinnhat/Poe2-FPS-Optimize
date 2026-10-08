@@ -8,7 +8,8 @@ public sealed record ColorModSetting(bool Enabled, string Group);
 public sealed record SessionSettings(string GamePath, double CameraZoom, string[] SelectedPatches,
     Dictionary<string, string>? GroupColors = null,
     Dictionary<string, ColorModSetting>? ModColors = null,
-    Dictionary<string, Dictionary<string, bool>>? PatchOptions = null)
+    Dictionary<string, Dictionary<string, bool>>? PatchOptions = null,
+    bool ColorTagPrefix = false)
 {
     private static readonly string SettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

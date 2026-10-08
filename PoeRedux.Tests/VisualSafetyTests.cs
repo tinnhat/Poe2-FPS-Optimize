@@ -8,53 +8,114 @@ namespace PoeRedux.Tests;
 public class VisualSafetyTests
 {
     [Fact]
-    public void EnvironmentFx_PreservesLightingAndPostProcessing()
+    public void MonsterDensity_ReducesCountsButKeepsEveryEmitterVisible()
     {
-        const string source = "\"post_processing\":{},\"player_environment_ao\":\"ambient.ao\",\"global_illumination\":{},\"effect_spawner\":{},\"rain_intensity\":1.0";
-        int candidates = 0;
-        string result = EnvironmentParticles2.PatchEnvironmentText(source, ref candidates);
-        Assert.Contains("\"post_processing\":{}", result);
-        Assert.Contains("\"player_environment_ao\":\"ambient.ao\"", result);
-        Assert.Contains("\"global_illumination\":{}", result);
-        Assert.Contains("\"effect_spawner\":{}", result);
-        Assert.Contains("\"rain_intensity\":0.0", result);
-        Assert.True(candidates > 0);
+        const string source = "version 5\n0\n{\"particles_count\":10,\"particles_count_min\":4,\"particles_count_max\":9,\"particle_duration_min\":3}";
+        string result = MonsterEffectDensityReducer.ReduceDensity(source, out int changed);
+        Assert.Contains("\"particles_count\":5", result);
+        Assert.Contains("\"particles_count_min\":2", result);
+        Assert.Contains("\"particles_count_max\":5", result);
+        Assert.Contains("\"particle_duration_min\":3", result);
+        Assert.Equal(3, changed);
     }
 
     [Fact]
-    public void Delirium_PreservesExposureAndDesaturation()
+    public void MonsterDensity_ReducesPpsWithoutChangingTimingOrMode()
     {
-        const string source = "\"fog\":{},\"post_processing\":{},\"post_transform\":{},\"desaturation\":0.4";
-        string result = Delirium.PatchEnvironmentText(source);
-        Assert.Contains("\"xog\":{}", result);
-        Assert.Contains("\"post_processing\":{}", result);
-        Assert.Contains("\"post_transform\":{}", result);
-        Assert.Contains("\"desaturation\":0.4", result);
+        const string source = "{\"particles_per_second\":{\"variance\":6.0,\"points\":[{\"time\":0.0,\"value\":18.0,\"mode\":\"Linear\"},{\"time\":1.0,\"value\":1.0,\"mode\":\"Linear\"}]},\"render_material\":\"danger.mat\"}";
+        string result = MonsterEffectDensityReducer.ReduceDensity(source, out int changed);
+        Assert.Contains("\"variance\":6.0", result);
+        Assert.Contains("\"value\":9", result);
+        Assert.Contains("\"value\":1.0", result);
+        Assert.Contains("\"time\":1.0", result);
+        Assert.Contains("\"mode\":\"Linear\"", result);
+        Assert.Contains("\"render_material\":\"danger.mat\"", result);
+        Assert.Equal(1, changed);
     }
 
     [Fact]
-    public void ScreenFilters_PreserveGameplayCues()
+    public void MonsterDensity_NeverTurnsAVisibleParticleIntoZero()
     {
-        const string source = "if( vignette_enable ) if ( dof_enable ) if( desaturation_enable ) exposure tonemap";
-        string result = PostProcessFilters.RewriteShader(source);
-        Assert.Contains("if( 0 )", result);
-        Assert.Contains("if ( 0 )", result);
-        Assert.Contains("if( desaturation_enable ) exposure tonemap", result);
-        string vignetteOnly = PostProcessFilters.RewriteShader(source, vignette: true, dof: false);
-        Assert.Contains("if ( dof_enable )", vignetteOnly);
-        Assert.DoesNotContain("if( vignette_enable )", vignetteOnly);
+        const string source = "{\"particles_count\":1,\"particles_count_min\":2,\"particles_count_max\":3,\"particles_per_second\":{\"variance\":0.0,\"points\":[{\"time\":0.0,\"value\":2.0}]}}";
+        string result = MonsterEffectDensityReducer.ReduceDensity(source, out _);
+        Assert.Contains("\"particles_count\":1", result);
+        Assert.Contains("\"particles_count_min\":1", result);
+        Assert.Contains("\"particles_count_max\":2", result);
+        Assert.Contains("\"value\":1", result);
+        Assert.DoesNotContain("\"particles_count\":0", result);
     }
 
     [Fact]
-    public void Weather_OnlyChangesSelectedIntensity()
+    public void PlayerSkillDensity_PreservesSparseCoreLayers()
     {
-        const string source = "\"rain_intensity\":1.0,\"clouds_intensity\":0.8,\"directional_light\":{}";
-        int candidates = 0;
-        string result = EnvironmentParticles2.PatchEnvironmentText(source, ref candidates, rain: true, clouds: false);
-        Assert.Contains("\"rain_intensity\":0.0", result);
-        Assert.Contains("\"clouds_intensity\":0.8", result);
-        Assert.Contains("\"directional_light\":{}", result);
-        Assert.Equal(1, candidates);
+        const string source = "{\"particles_count\":4,\"particles_count_min\":5,\"particles_count_max\":20,\"particles_per_second\":{\"variance\":2.0,\"points\":[{\"time\":0.0,\"value\":4.0},{\"time\":1.0,\"value\":30.0}]}}";
+        string result = MonsterEffectDensityReducer.ReduceDensity(source, out int changed, 0.50, 4.0);
+        Assert.Contains("\"particles_count\":4", result);
+        Assert.Contains("\"particles_count_min\":3", result);
+        Assert.Contains("\"particles_count_max\":10", result);
+        Assert.Contains("\"variance\":2.0", result);
+        Assert.Contains("\"value\":4.0", result);
+        Assert.Contains("\"value\":15", result);
+        Assert.Equal(3, changed);
+    }
+
+    [Theory]
+    [InlineData("bow_lightning_arrow", true)]
+    [InlineData("monk_lightningstrike", true)]
+    [InlineData("reservation_archmage", true)]
+    [InlineData("player_resources", true)]
+    [InlineData("monsters_effects", false)]
+    [InlineData("environment_effects", false)]
+    [InlineData("ground_effects_v3", false)]
+    [InlineData("status_ailments", false)]
+    [InlineData("npc", false)]
+    [InlineData("storm_call_atziri", false)]
+    [InlineData("player_monster_shared", false)]
+    public void PlayerSkillRoots_RejectSharedAndMonsterFolders(string root, bool expected)
+    {
+        Assert.Equal(expected, PlayerSkillEffectDensityReducer.IsPlayerSkillRoot(root));
+    }
+
+    [Fact]
+    public void DeliriumOverlay_ScalesIntensityWithoutRemovingRenderParameters()
+    {
+        const string source = "{\"name\":\"Fog Haze Intensity\",\"parameters\":[{\"value\":1.25}],\"render_pass\":\"Append\"}";
+        int found = 0;
+        string result = Delirium.ScaleMaterialScalar(source, "Fog Haze Intensity", 0.4, ref found);
+        Assert.Contains("\"value\":0.5", result);
+        Assert.Contains("\"render_pass\":\"Append\"", result);
+        Assert.Equal(1, found);
+    }
+
+    [Fact]
+    public void DeliriumObjectMaterial_ScalesBlurAndKeepsOtherValues()
+    {
+        const string path = "metadata/effects/spells/monsters_effects/league_delirium/deliriumobject/mats/open/blur.mat";
+        const string source = "{\"graphinstances\":[{\"custom_parameters\":[{\"name\":\"Blur Intensity\",\"parameters\":[{\"value\":2.0}]},{\"name\":\"Colour\",\"parameters\":[{\"value\":[1.0,0.5,0.25]}]}]}]}";
+        string result = Delirium.ScaleDeliriumObjectMaterial(path, source, 0.4, out int found);
+        Assert.Contains("\"value\": 0.8", result);
+        Assert.Contains("1.0", result);
+        Assert.Contains("0.5", result);
+        Assert.Equal(1, found);
+    }
+
+    [Fact]
+    public void DeliriumObjectMaterial_DoesNotRewriteAnAlreadyZeroedValue()
+    {
+        const string path = "metadata/effects/spells/monsters_effects/league_delirium/deliriumobject/mats/object/blur.mat";
+        const string source = "{\"graphinstances\":[{\"custom_parameters\":[{\"name\":\"Blur Intensity\",\"parameters\":[{\"value\":0.0}]}]}]}";
+        string result = Delirium.ScaleDeliriumObjectMaterial(path, source, 0.4, out int found);
+        Assert.Equal(source, result);
+        Assert.Equal(1, found);
+    }
+
+    [Theory]
+    [InlineData("{\"xcreenspace_fog\":{}}", true)]
+    [InlineData("{\"xffect_spawner\":{}}", true)]
+    [InlineData("{\"screenspace_fog\":{},\"effect_spawner\":{}}", false)]
+    public void Delirium_DetectsOnlyLegacyEnvironmentKeyDamage(string source, bool expected)
+    {
+        Assert.Equal(expected, Delirium.HasLegacyEnvironmentMutation(source));
     }
 
     [Fact]
@@ -92,4 +153,17 @@ public class VisualSafetyTests
         Assert.Equal("Great", ModColorGroups.Normalize("blue"));
         Assert.Equal("Avoid", ModColorGroups.Normalize("Avoid"));
     }
+
+    [Fact]
+    public void ReadabilityStyle_CanSwitchBetweenWholeLineAndTag()
+    {
+        const string source = "1 2 \"Monsters deal 30% increased Damage\"";
+        string whole = ModTextStyler.Restyle(source, "rgb(209,46,46)", "BAD", true, false);
+        string tag = ModTextStyler.Restyle(whole, "rgb(209,46,46)", "BAD", true, true);
+        string restored = ModTextStyler.Restyle(tag, null, "BAD", false, false);
+        Assert.Contains("<rgb(209,46,46)>{{Monsters deal", whole);
+        Assert.Contains("{{BAD}}", tag);
+        Assert.Equal(source, restored);
+    }
+
 }

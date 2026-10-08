@@ -2,7 +2,6 @@ using LibBundle3.Nodes;
 using PoeRedux.Services;
 using System.IO;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace PoeRedux.Patches;
 
@@ -87,47 +86,6 @@ public abstract class SelectiveFxReducer : IPatch
             current = next;
         }
         return current;
-    }
-}
-
-public sealed class MonsterAmbientFxReducer : SelectiveFxReducer
-{
-    public override string Name => "Reduce Monster Non-Combat FX (Safe)";
-    public override object Description => "Removes PoE 2 monster idle, ambient, and footstep particles while preserving attacks, projectiles, ground effects, auras, and danger telegraphs.";
-    protected override string[] RootPath => ["metadata", "effects", "spells", "monsters_effects"];
-
-    protected override bool ShouldReduce(string path) =>
-        path.Contains("idle", StringComparison.Ordinal) ||
-        path.Contains("ambient", StringComparison.Ordinal) ||
-        path.Contains("/footstep", StringComparison.Ordinal);
-}
-
-public sealed class SafePlayerSkillFxReducer : SelectiveFxReducer
-{
-    public override string Name => "Reduce Player Skill Particles (Performance)";
-    public override object Description => "Aggressively removes player-skill particles and trails while preserving paths associated with projectiles, ground/area effects, danger telegraphs, indicators, minions, traps, mines, totems, bosses, and league mechanics. PoE 2 can share some skill assets with monsters.";
-    protected override string[] RootPath => ["metadata", "effects", "spells"];
-
-    private static readonly string[] ExcludedRoots =
-    {
-        "/monsters_effects/", "/ground_effects/", "/ground_effects_v2/", "/ground_effects_v3/",
-        "/microtransactions/", "/environment_effects/", "/traps/", "/league_", "/leagues/",
-        "/ritual", "/breach", "/abyss", "/delirium", "/boss", "/npc/", "/objects/",
-        "/terrain/", "/hideout", "/sanctum/", "/ultimatum/"
-    };
-
-    private static readonly Regex ProtectedGameplayVisual = new(
-        "(?:warning|telegraph|danger|ground|grd|area|aoe|zone|indicator|marker|target|reticle|radius|boundary|wall|beam|laser|projectile|proj|arrow|bolt|grenade|missile|orb|portal|checkpoint|waypoint|minion|summon|skeleton|spectre|reaper|companion|totem|mine|trap)",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    protected override bool ShouldReduce(string path)
-    {
-        string extension = Path.GetExtension(path);
-        return (extension.Equals(".pet", StringComparison.OrdinalIgnoreCase) ||
-                extension.Equals(".trl", StringComparison.OrdinalIgnoreCase)) &&
-               path.StartsWith("metadata/effects/spells/", StringComparison.Ordinal) &&
-               !ExcludedRoots.Any(path.Contains) &&
-               !ProtectedGameplayVisual.IsMatch(path);
     }
 }
 

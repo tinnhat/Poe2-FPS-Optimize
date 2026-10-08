@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<ColorGroupViewModel> _colorGroups;
     private string _ggpkPath = string.Empty;
     private double _cameraZoom = 2.4;
+    private bool _colorTagPrefix;
     private string? _updateDownloadUrl;
     private string? _updateVersion;
     private bool _languageUiReady;
@@ -76,15 +77,9 @@ public partial class MainWindow : Window
             new MonsterHP(),
             new Camera(),
             new Minimap(),
-            new VisualNoiseParticles(),
-            new VisualNoiseEffects(),
-            new SafeMtxParticleReducer(),
-            new Corpse(),
-            new Fog(),
-            new EnvironmentParticles2(),
-            new PostProcessFilters(),
+            new MonsterEffectDensityReducer(),
+            new PlayerSkillEffectDensityReducer(),
             new Delirium(),
-            new LoadingScreen(),
             // new Aoc(),
             // new Env(),
             // new Epk(),
@@ -125,6 +120,7 @@ public partial class MainWindow : Window
 
         if (double.IsFinite(settings.CameraZoom))
             ZoomSlider.Value = Math.Clamp(settings.CameraZoom, ZoomSlider.Minimum, ZoomSlider.Maximum);
+        _colorTagPrefix = settings.ColorTagPrefix;
 
         var selectedNames = new HashSet<string>(settings.SelectedPatches ?? [], StringComparer.Ordinal);
         foreach (var patch in _patches)
@@ -168,14 +164,15 @@ public partial class MainWindow : Window
             _patches.Where(viewModel => viewModel.Patch is IConfigurablePatch)
                 .ToDictionary(viewModel => viewModel.Patch.Name,
                     viewModel => ((IConfigurablePatch)viewModel.Patch).Options
-                        .ToDictionary(option => option.Id, option => option.IsEnabled))
+                        .ToDictionary(option => option.Id, option => option.IsEnabled)),
+            _colorTagPrefix
         ).Save();
     }
 
     private void PatchOptionsButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is System.Windows.Controls.Button { DataContext: PatchViewModel viewModel } &&
-            viewModel.Patch is IConfigurablePatch configurable)
+        if (sender is not System.Windows.Controls.Button { DataContext: PatchViewModel viewModel }) return;
+        if (viewModel.Patch is IConfigurablePatch configurable)
             new PatchOptionsWindow(viewModel.Name, configurable).ShowDialog();
     }
 
@@ -227,7 +224,7 @@ public partial class MainWindow : Window
     {
         var editedGroups = new ObservableCollection<ColorGroupViewModel>(
             _colorGroups.Select(group => new ColorGroupViewModel(group.Name, group.Hex)));
-        var result = ColorModsEditor.Show(_colorMods, editedGroups);
+        var result = ColorModsEditor.Show(_colorMods, editedGroups, _colorTagPrefix, out var editedTagPrefix);
         if (result == true)
         {
             foreach (var colorMod in _colorMods)
@@ -237,6 +234,7 @@ public partial class MainWindow : Window
             }
             foreach (var group in _colorGroups)
                 group.Hex = editedGroups.First(edited => edited.Name == group.Name).Hex;
+            _colorTagPrefix = editedTagPrefix;
         }
         else
         {
@@ -313,6 +311,7 @@ public partial class MainWindow : Window
                 colorModsPatch2.GroupColors = _colorGroups.ToDictionary(
                     group => group.Name,
                     group => $"rgb({Convert.ToInt32(group.Hex.Substring(1, 2), 16)},{Convert.ToInt32(group.Hex.Substring(3, 2), 16)},{Convert.ToInt32(group.Hex.Substring(5, 2), 16)})");
+                colorModsPatch2.TagPrefix = _colorTagPrefix;
             }
         }
 
@@ -512,8 +511,15 @@ public partial class MainWindow : Window
                 ProgressBar.Value = i;
             });
 
-            patch.Patch.Apply(fileTree);
-            index.Save();
+            try
+            {
+                patch.Patch.Apply(fileTree);
+                index.Save();
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"{patch.Name}: {ex.Message}", ex);
+            }
 
             Dispatcher.Invoke(() =>
             {

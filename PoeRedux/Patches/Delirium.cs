@@ -1,262 +1,271 @@
 using LibBundle3.Nodes;
+using PoeRedux.Services;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
-using PoeRedux.Services;
 
 namespace PoeRedux.Patches;
 
-public class Delirium : IPatch
+public sealed class Delirium : IPatch
 {
-    public string Name => "Delirium Fog Patch";
-    public object Description => "Removes Delirium fog, mirror-activation smoke, blur, shimmer, and player haze while preserving encounter objects and unrelated combat effects.";
+    private const double ContactDensityFactor = 0.40;
+    private const double PersistentDensityFactor = 0.50;
+    private const double OverlayFactor = 0.40;
+    private const double FogAlphaFactor = 0.40;
+    private const double PreserveAtOrBelow = 4.0;
 
-    private static readonly HashSet<string> MirrorFogParticlePaths = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "metadata/effects/spells/monsters_effects/league_delirium/fog_origin/fx/fog_start_01/line.pet",
-        "metadata/effects/spells/monsters_effects/league_delirium/tangmazu/fx/gigamirror_01/spread_fog_01/fx_fwdline.pet",
-    };
-
-    private List<FileNode> fileNodes = [];
-
-    private readonly string[] extensions = {
-        ".ao",
-        ".aoc",
-        ".pet",
-        ".trl",
-    };
-
-    private void CollectFileNodesRecursively(DirectoryNode dir)
-    {
-        foreach (var node in dir.Children)
+    private static readonly IReadOnlyDictionary<string, double> ObjectParticles =
+        new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
         {
-            switch (node)
-            {
-                case DirectoryNode childDir:
-                    CollectFileNodesRecursively(childDir);
-                    break;
+            ["metadata/effects/spells/monsters_effects/league_delirium/deliriumobject/fx/object_open.pet"] = ContactDensityFactor,
+            ["metadata/effects/spells/monsters_effects/league_delirium/deliriumobject/fx/object_burst.pet"] = ContactDensityFactor,
+            ["metadata/effects/spells/monsters_effects/league_delirium/deliriumobject/fx/deliriumobject.pet"] = PersistentDensityFactor,
+            ["metadata/effects/spells/monsters_effects/league_delirium/deliriumobject/fx/deliriumobject_journeyend.pet"] = PersistentDensityFactor,
+        };
 
-                case FileNode fileNode:
-                    if (HasTargetExtension(fileNode.Name))
-                        fileNodes.Add(fileNode);
-                    break;
-            }
-        }
-    }
+    public string Name => "Reduce Delirium Fog & Contact Effects";
 
-    private void TryPatchFile(FileNode file)
-    {
-        var record = file.Record;
-        string path = (record.Path ?? string.Empty).Replace('\\', '/').ToLowerInvariant();
-        if (!(path.Contains("fog") || path.Contains("mist") || path.Contains("smoke") ||
-              path.Contains("wisp") || path.Contains("cloud")))
-            return;
-
-        var bytes = record.Read();
-        string data = Encoding.Unicode.GetString(bytes.ToArray());
-
-        if (string.IsNullOrEmpty(data))
-            return;
-
-        string original = data;
-
-        if (file.Name.EndsWith(".pet", StringComparison.OrdinalIgnoreCase) ||
-            file.Name.EndsWith(".trl", StringComparison.OrdinalIgnoreCase))
-        {
-            data = "0";
-        }
-        else if (data.Contains("Metadata/FmtParent") && !data.Contains("AnimatedRender"))
-        {
-            data = "version 3\nextends \"Metadata/FmtParent\"";
-        }
-        else if (data.Contains("Metadata/FmtParent") && data.Contains("AnimatedRender"))
-        {
-            data = "version 3\nextends \"Metadata/FmtParent\"\n\nclient\n{\n\tAnimatedRender\n\t{\n\t\tcannot_be_disabled = true\n\t}\n}";
-        }
-        else if (data.Contains("Metadata/Parent"))
-        {
-            data = @"version 3
-extends ""Metadata/Parent""
-
-BaseAnimationEvents
-{
-}
-
-AnimationController
-{
-	metadata = ""Art/Models/Effects/enviro_effects/weather_attachments/generic_rig/weather_rig.amd""
-}
-
-client
-{
-    ClientAnimationController
-    {
-        skeleton = ""Art/Models/Effects/enviro_effects/weather_attachments/generic_rig/weather_rig.ast""
-    }
-
-    BoneGroups
-    {
-        bone_group = ""box false aux_box1 aux_box2 aux_box3 ""
-    }
-}";
-        }
-
-        if (data == original)
-            return;
-
-        var newBytes = Encoding.Unicode.GetBytes(data);
-        if (!newBytes.AsSpan().StartsWith(Encoding.Unicode.GetPreamble()))
-        {
-            newBytes = [.. Encoding.Unicode.GetPreamble(), .. newBytes];
-        }
-        BackupManager.RecordOriginal(record);
-        record.Write(newBytes);
-    }
-
-    private bool HasTargetExtension(string fileName) =>
-        extensions.Any(ext =>
-            fileName.EndsWith(ext, StringComparison.OrdinalIgnoreCase));
-
-    private static DirectoryNode? NavigateTo(DirectoryNode root, params string[] path)
-    {
-        DirectoryNode current = root;
-        foreach (var name in path)
-        {
-            var next = current.Children.OfType<DirectoryNode>().FirstOrDefault(d => d.Name == name);
-            if (next is null) return null;
-            current = next;
-        }
-        return current;
-    }
+    public object Description =>
+        "Reduces Delirium fog, player haze, blur, shimmer, and the burst produced when a Delirium object opens. " +
+        "Monster attacks, projectiles, ground markers, trails, lighting, animation, and sound remain enabled.";
 
     public void Apply(DirectoryNode root)
     {
-        fileNodes.Clear();
-        var dir = NavigateTo(root, "metadata", "effects", "environment", "delirium");
-        if (dir is not null)
-            CollectFileNodesRecursively(dir);
+        RejectLegacyEnvironmentPatch(root);
 
-        if (dir is null || fileNodes.Count == 0)
-            throw new InvalidDataException("Could not find PoE 2 Delirium environment effects; the game data layout may have changed.");
+        var pending = new List<PendingWrite>();
+        CollectObjectParticleWrites(root, pending);
+        CollectPlayerOverlayWrites(root, pending);
+        CollectObjectMaterialWrites(root, pending);
+        CollectEnvironmentFogWrite(root, pending);
 
-        foreach (var file in fileNodes)
+        if (pending.Count == 0) return;
+
+        foreach (PendingWrite write in pending)
         {
-            TryPatchFile(file);
+            byte[] current = write.File.Record.Read().ToArray();
+            if (current.AsSpan().SequenceEqual(write.Bytes)) continue;
+            BackupManager.RecordOriginal(write.File.Record);
+            write.File.Record.Write(write.Bytes);
         }
-
-        // The map-wide Delirium haze in PoE 2 is a player render-pass effect,
-        // not an environment fog object. Patch only the explicit haze parameter
-        // in its two materials. The EPK itself is deliberately left intact because
-        // malformed/blank effect packs can crash the client during scene setup.
-        PatchPlayerDeliriumHazeMaterials(root);
-
-        // The mirror uses separate spell particles and high-intensity material
-        // post effects which do not live under the environment Delirium tree.
-        // Keep the AO/EPK containers valid and neutralize only their visual
-        // particle and material inputs.
-        PatchMirrorFogParticles(root);
-        PatchDeliriumObjectPostFxMaterials(root);
-
-        var environmentSettings = NavigateTo(root, "metadata", "environmentsettings");
-        if (environmentSettings is null)
-            throw new InvalidDataException("Could not find PoE 2 environment settings.");
-        PatchEnvironmentSettings(environmentSettings);
     }
 
-    private static void PatchMirrorFogParticles(DirectoryNode root)
+    private static void CollectObjectParticleWrites(DirectoryNode root, ICollection<PendingWrite> pending)
     {
-        var leagueDirectory = NavigateTo(root, "metadata", "effects", "spells", "monsters_effects",
-            "league_delirium") ??
-            throw new InvalidDataException("Could not find the PoE 2 Delirium spell effects directory.");
+        DirectoryNode league = NavigateTo(root, "metadata", "effects", "spells", "monsters_effects", "league_delirium") ??
+            throw new InvalidDataException("Could not find the PoE 2 Delirium effects directory.");
 
         var matched = new Dictionary<string, FileNode>(StringComparer.OrdinalIgnoreCase);
-        CollectExactFiles(leagueDirectory, MirrorFogParticlePaths, matched);
-        if (matched.Count != MirrorFogParticlePaths.Count)
+        CollectExactFiles(league, ObjectParticles.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), matched);
+        if (matched.Count != ObjectParticles.Count)
         {
-            string missing = string.Join(", ", MirrorFogParticlePaths.Where(path => !matched.ContainsKey(path)));
-            throw new InvalidDataException($"Could not find the expected Delirium mirror fog particles: {missing}. No mirror particles were written.");
+            string missing = string.Join(", ", ObjectParticles.Keys.Where(path => !matched.ContainsKey(path)));
+            throw new InvalidDataException($"Could not find expected Delirium object particles: {missing}. No files were written.");
         }
 
-        byte[] replacement = [.. Encoding.Unicode.GetPreamble(), .. Encoding.Unicode.GetBytes("0")];
-        foreach (var file in matched.Values)
+        foreach ((string path, double factor) in ObjectParticles)
         {
-            string current = Encoding.Unicode.GetString(file.Record.Read().ToArray());
-            if (current.Trim('\0', '\uFEFF', ' ', '\r', '\n', '\t') == "0") continue;
-            BackupManager.RecordOriginal(file.Record);
-            file.Record.Write(replacement);
-        }
-    }
-
-    private static void CollectExactFiles(
-        DirectoryNode directory,
-        IReadOnlySet<string> targetPaths,
-        IDictionary<string, FileNode> matched)
-    {
-        foreach (var node in directory.Children)
-        {
-            if (node is DirectoryNode subdirectory)
-            {
-                CollectExactFiles(subdirectory, targetPaths, matched);
-                continue;
-            }
-
-            if (node is not FileNode file) continue;
-            string path = NormalizePath(file.Record.Path);
-            if (targetPaths.Contains(path)) matched[path] = file;
+            FileNode file = matched[path];
+            SourceText source = ReadOriginalOrCurrent(file);
+            RejectBlankParticle(path, source.Text);
+            string reduced = MonsterEffectDensityReducer.ReduceDensity(
+                source.Text, out int changed, factor, PreserveAtOrBelow);
+            if (changed == 0)
+                throw new InvalidDataException($"No supported density values were found in {path}; no files were written.");
+            pending.Add(new PendingWrite(file, Encode(reduced, source.HasBom)));
         }
     }
 
-    private static void PatchDeliriumObjectPostFxMaterials(DirectoryNode root)
+    private static void CollectPlayerOverlayWrites(DirectoryNode root, ICollection<PendingWrite> pending)
     {
-        var materialsDirectory = NavigateTo(root, "metadata", "effects", "spells", "monsters_effects",
+        DirectoryNode epks = NavigateTo(root, "metadata", "effects", "spells", "monsters_effects",
+            "league_delirium", "deliriumobject", "epks") ??
+            throw new InvalidDataException("Could not find the PoE 2 Delirium player overlay directory.");
+
+        foreach (string name in new[] { "playeraffliction_epk_pass1.mat", "playeraffliction_epk_pass2.mat" })
+        {
+            FileNode file = epks.Children.OfType<FileNode>().FirstOrDefault(item =>
+                item.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) ??
+                throw new InvalidDataException($"Could not find Delirium overlay material {name}.");
+
+            SourceText source = ReadOriginalOrCurrent(file);
+            int found = 0;
+            string reduced = ScaleMaterialScalar(source.Text, "AlbedoMulti", OverlayFactor, ref found);
+            reduced = ScaleMaterialScalar(reduced, "Fog Haze Intensity", OverlayFactor, ref found);
+            if (name.Contains("pass2", StringComparison.OrdinalIgnoreCase))
+                reduced = ScaleMaterialScalar(reduced, "Blur Intensity", OverlayFactor, ref found);
+
+            int expected = name.Contains("pass2", StringComparison.OrdinalIgnoreCase) ? 3 : 2;
+            if (found != expected)
+                throw new InvalidDataException($"Expected {expected} overlay parameters in {name}, found {found}; no files were written.");
+            if (reduced == source.Text)
+                throw new InvalidDataException(
+                    $"Delirium overlay intensities in {name} are already zero. Restore the game with PackCheck or Verify game files before applying this patch.");
+            pending.Add(new PendingWrite(file, Encode(reduced, source.HasBom)));
+        }
+    }
+
+    private static void CollectObjectMaterialWrites(DirectoryNode root, ICollection<PendingWrite> pending)
+    {
+        DirectoryNode materials = NavigateTo(root, "metadata", "effects", "spells", "monsters_effects",
             "league_delirium", "deliriumobject", "mats") ??
-            throw new InvalidDataException("Could not find the PoE 2 Delirium mirror materials directory.");
+            throw new InvalidDataException("Could not find the PoE 2 Delirium object material directory.");
 
-        var pendingWrites = new List<(FileNode File, string Patched)>();
+        var localWrites = new List<PendingWrite>();
         int matchedParameters = 0;
-        CollectDeliriumMaterialWrites(materialsDirectory, pendingWrites, ref matchedParameters);
+        Visit(materials, file =>
+        {
+            if (!file.Name.EndsWith(".mat", StringComparison.OrdinalIgnoreCase)) return;
+            string path = NormalizePath(file.Record.Path);
+            if (!IsDeliriumPostFxMaterialPath(path)) return;
+
+            SourceText source = ReadOriginalOrCurrent(file);
+            string reduced = ScaleDeliriumObjectMaterial(path, source.Text, OverlayFactor, out int found);
+            matchedParameters += found;
+            if (found > 0 && reduced != source.Text)
+                localWrites.Add(new PendingWrite(file, Encode(reduced, source.HasBom)));
+        });
 
         const int expectedParameters = 14;
         if (matchedParameters != expectedParameters)
-        {
             throw new InvalidDataException(
-                $"Expected {expectedParameters} Delirium mirror post-effect parameters, found {matchedParameters}; no mirror materials were written.");
-        }
-
-        foreach (var pending in pendingWrites)
-        {
-            byte[] bytes = [.. Encoding.Unicode.GetPreamble(), .. Encoding.Unicode.GetBytes(pending.Patched)];
-            BackupManager.RecordOriginal(pending.File.Record);
-            pending.File.Record.Write(bytes);
-        }
+                $"Expected {expectedParameters} Delirium blur, shimmer, and smoke parameters, found {matchedParameters}; no files were written.");
+        if (localWrites.Count == 0)
+            throw new InvalidDataException(
+                "Delirium object intensities are already zero. Restore the game with PackCheck or Verify game files before applying this patch.");
+        foreach (PendingWrite write in localWrites) pending.Add(write);
     }
 
-    private static void CollectDeliriumMaterialWrites(
-        DirectoryNode directory,
-        ICollection<(FileNode File, string Patched)> pendingWrites,
-        ref int matchedParameters)
+    private static void CollectEnvironmentFogWrite(DirectoryNode root, ICollection<PendingWrite> pending)
     {
-        foreach (var node in directory.Children)
+        DirectoryNode materials = NavigateTo(root, "metadata", "effects", "environment", "delirium", "blood", "mat") ??
+            throw new InvalidDataException("Could not find the PoE 2 Delirium environment fog materials.");
+        FileNode fog = materials.Children.OfType<FileNode>().FirstOrDefault(file =>
+            file.Name.Equals("fog.mat", StringComparison.OrdinalIgnoreCase)) ??
+            throw new InvalidDataException("Could not find the PoE 2 Delirium fog material.");
+
+        SourceText source = ReadOriginalOrCurrent(fog);
+        int found = 0;
+        string reduced = ScaleMaterialScalar(source.Text, "Alpha Multiply", FogAlphaFactor, ref found);
+        if (found != 1)
+            throw new InvalidDataException($"Expected one Delirium fog alpha parameter, found {found}; no files were written.");
+        pending.Add(new PendingWrite(fog, Encode(reduced, source.HasBom)));
+    }
+
+    private static void RejectLegacyEnvironmentPatch(DirectoryNode root)
+    {
+        DirectoryNode settings = NavigateTo(root, "metadata", "environmentsettings") ??
+            throw new InvalidDataException("Could not find the PoE 2 environment settings directory.");
+
+        string? damagedPath = null;
+        Visit(settings, file =>
         {
-            if (node is DirectoryNode subdirectory)
-            {
-                CollectDeliriumMaterialWrites(subdirectory, pendingWrites, ref matchedParameters);
-                continue;
-            }
-
-            if (node is not FileNode file || !file.Name.EndsWith(".mat", StringComparison.OrdinalIgnoreCase))
-                continue;
-
+            if (damagedPath is not null || !file.Name.EndsWith(".env", StringComparison.OrdinalIgnoreCase)) return;
             string path = NormalizePath(file.Record.Path);
-            if (!IsDeliriumPostFxMaterialPath(path)) continue;
+            string text = Encoding.Unicode.GetString(file.Record.Read().ToArray()).TrimStart('\uFEFF');
+            bool delirium = path.Contains("delirium", StringComparison.OrdinalIgnoreCase) ||
+                             text.Contains("/Delirium/", StringComparison.OrdinalIgnoreCase) ||
+                             text.Contains("FourDelirium", StringComparison.OrdinalIgnoreCase);
+            if (!delirium) return;
+            if (HasLegacyEnvironmentMutation(text)) damagedPath = path;
+        });
 
-            string current = Encoding.Unicode.GetString(file.Record.Read().ToArray()).TrimStart('\uFEFF');
-            string patched = PatchDeliriumObjectMaterial(path, current, out int found);
-            matchedParameters += found;
-            if (patched != current) pendingWrites.Add((file, patched));
+        if (damagedPath is not null)
+            throw new InvalidDataException(
+                $"Old destructive Delirium edits were detected in {damagedPath}. Restore the game with PackCheck or Verify game files before applying this patch.");
+    }
+
+    internal static bool HasLegacyEnvironmentMutation(string text) =>
+        text.Contains("\"xog\"", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("\"xcreenspace_fog\"", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("\"xffect_spawner\"", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("\"xost_processing\"", StringComparison.OrdinalIgnoreCase) ||
+        text.Contains("\"xost_transform\"", StringComparison.OrdinalIgnoreCase);
+
+    internal static string ScaleMaterialScalar(string data, string parameterName, double factor, ref int found)
+    {
+        string pattern = "(?s)(\\\"name\\\"\\s*:\\s*\\\"" + Regex.Escape(parameterName) +
+                         "\\\"\\s*,\\s*\\\"parameters\\\"\\s*:\\s*\\[\\s*\\{\\s*" +
+                         "\\\"value\\\"\\s*:\\s*)([-+0-9.eE]+)";
+        var regex = new Regex(pattern, RegexOptions.IgnoreCase);
+        Match match = regex.Match(data);
+        if (!match.Success) return data;
+        if (!double.TryParse(match.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double value) ||
+            !double.IsFinite(value)) return data;
+
+        found++;
+        string formatted = (value * factor).ToString("0.0###############", CultureInfo.InvariantCulture);
+        return string.Concat(data.AsSpan(0, match.Groups[2].Index), formatted,
+            data.AsSpan(match.Groups[2].Index + match.Groups[2].Length));
+    }
+
+    internal static string ScaleDeliriumObjectMaterial(
+        string path, string data, double factor, out int parametersFound)
+    {
+        parametersFound = 0;
+        bool valuesChanged = false;
+        JsonNode root = JsonNode.Parse(data) ??
+            throw new InvalidDataException($"Invalid Delirium material JSON: {path}");
+        if (root["graphinstances"] is not JsonArray graphs) return data;
+
+        foreach (JsonNode? graphNode in graphs)
+        {
+            if (graphNode is not JsonObject graph || graph["custom_parameters"] is not JsonArray parameters)
+                continue;
+            foreach (JsonNode? parameterNode in parameters)
+            {
+                if (parameterNode is not JsonObject parameter) continue;
+                string name = parameter["name"]?.GetValue<string>() ?? string.Empty;
+                bool target = name.Equals("Blur Intensity", StringComparison.OrdinalIgnoreCase) ||
+                              name.Equals("Shimmer Intensity", StringComparison.OrdinalIgnoreCase) ||
+                              path.EndsWith("/mats/open/disperse_smoke_r.mat", StringComparison.OrdinalIgnoreCase) &&
+                              name.Equals("- Intensity", StringComparison.OrdinalIgnoreCase);
+                if (!target) continue;
+                if (parameter["parameters"] is not JsonArray values || values.Count == 0)
+                    throw new InvalidDataException($"Delirium material parameter {name} has no values: {path}");
+
+                bool numeric = false;
+                foreach (JsonNode? valueNode in values)
+                    if (valueNode is JsonObject valueObject && valueObject["value"] is JsonNode value)
+                        numeric |= ScaleNumericValue(valueObject, "value", value, factor, ref valuesChanged);
+                if (!numeric)
+                    throw new InvalidDataException($"Delirium material parameter {name} is not numeric: {path}");
+                parametersFound++;
+            }
         }
+
+        return parametersFound == 0 || !valuesChanged ? data :
+            root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static bool ScaleNumericValue(
+        JsonObject owner, string propertyName, JsonNode value, double factor, ref bool valuesChanged)
+    {
+        if (value is JsonArray array)
+        {
+            bool numeric = false;
+            for (int i = 0; i < array.Count; i++)
+                if (array[i] is JsonValue item && item.TryGetValue<double>(out double number))
+                {
+                    double scaled = number * factor;
+                    array[i] = scaled;
+                    valuesChanged |= scaled != number;
+                    numeric = true;
+                }
+            return numeric;
+        }
+
+        if (value is JsonValue scalar && scalar.TryGetValue<double>(out double scalarNumber))
+        {
+            double scaled = scalarNumber * factor;
+            owner[propertyName] = scaled;
+            valuesChanged |= scaled != scalarNumber;
+            return true;
+        }
+        return false;
     }
 
     internal static bool IsDeliriumPostFxMaterialPath(string path) =>
@@ -264,173 +273,63 @@ client
         path.Contains("/deliriumobject/mats/object/", StringComparison.OrdinalIgnoreCase) ||
         path.Contains("/deliriumobject/mats/object_journeyend/", StringComparison.OrdinalIgnoreCase);
 
-    internal static string PatchDeliriumObjectMaterial(string path, string data, out int parametersFound)
+    private static SourceText ReadOriginalOrCurrent(FileNode file)
     {
-        parametersFound = 0;
-        JsonNode root = JsonNode.Parse(data) ?? throw new InvalidDataException($"Invalid Delirium material JSON: {path}");
-        JsonArray? graphs = root["graphinstances"] as JsonArray;
-        if (graphs is null) return data;
-
-        foreach (JsonNode? graphNode in graphs)
-        {
-            if (graphNode is not JsonObject graph || graph["custom_parameters"] is not JsonArray customParameters)
-                continue;
-
-            foreach (JsonNode? parameterNode in customParameters)
-            {
-                if (parameterNode is not JsonObject parameter) continue;
-                string name = parameter["name"]?.GetValue<string>() ?? string.Empty;
-                bool isPostFx = name.Equals("Blur Intensity", StringComparison.OrdinalIgnoreCase) ||
-                                name.Equals("Shimmer Intensity", StringComparison.OrdinalIgnoreCase);
-                bool isMirrorSmoke = path.EndsWith("/mats/open/disperse_smoke_r.mat", StringComparison.OrdinalIgnoreCase) &&
-                                     name.Equals("- Intensity", StringComparison.OrdinalIgnoreCase);
-                if (!isPostFx && !isMirrorSmoke) continue;
-
-                if (parameter["parameters"] is not JsonArray values || values.Count == 0)
-                    throw new InvalidDataException($"Delirium material parameter {name} has no values: {path}");
-
-                bool foundNumericValue = false;
-                foreach (JsonNode? valueNode in values)
-                {
-                    if (valueNode is not JsonObject valueObject || valueObject["value"] is not JsonNode value)
-                        continue;
-                    foundNumericValue |= ZeroNumericValue(valueObject, "value", value);
-                }
-
-                if (!foundNumericValue)
-                    throw new InvalidDataException($"Delirium material parameter {name} is not numeric: {path}");
-                parametersFound++;
-            }
-        }
-
-        if (parametersFound == 0) return data;
-        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        byte[] current = file.Record.Read().ToArray();
+        byte[] source = BackupManager.TryReadOriginal(file.Record.Path ?? string.Empty, out byte[] original)
+            ? original : current;
+        bool hasBom = source.AsSpan().StartsWith(Encoding.Unicode.Preamble);
+        return new SourceText(Encoding.Unicode.GetString(source).TrimStart('\uFEFF'), hasBom);
     }
 
-    private static bool ZeroNumericValue(JsonObject owner, string propertyName, JsonNode value)
+    private static void RejectBlankParticle(string path, string text)
     {
-        if (value is JsonArray array)
-        {
-            bool changed = false;
-            for (int i = 0; i < array.Count; i++)
-            {
-                if (array[i] is JsonValue item && item.TryGetValue<double>(out _))
-                {
-                    array[i] = 0.0;
-                    changed = true;
-                }
-            }
-            return changed;
-        }
+        if (text.Trim('\0', '\uFEFF', ' ', '\r', '\n', '\t') == "0")
+            throw new InvalidDataException(
+                $"Old destructive Delirium particle data was detected in {path}. Restore the game with PackCheck or Verify game files before applying this patch.");
+    }
 
-        if (value is JsonValue scalar && scalar.TryGetValue<double>(out _))
-        {
-            owner[propertyName] = 0.0;
-            return true;
-        }
+    private static byte[] Encode(string text, bool hasBom)
+    {
+        byte[] body = Encoding.Unicode.GetBytes(text);
+        return hasBom ? [.. Encoding.Unicode.Preamble, .. body] : body;
+    }
 
-        return false;
+    private static void CollectExactFiles(
+        DirectoryNode directory, IReadOnlySet<string> targets, IDictionary<string, FileNode> matched)
+    {
+        Visit(directory, file =>
+        {
+            string path = NormalizePath(file.Record.Path);
+            if (targets.Contains(path)) matched[path] = file;
+        });
+    }
+
+    private static void Visit(DirectoryNode directory, Action<FileNode> action)
+    {
+        foreach (var node in directory.Children)
+        {
+            if (node is DirectoryNode child) Visit(child, action);
+            else if (node is FileNode file) action(file);
+        }
+    }
+
+    private static DirectoryNode? NavigateTo(DirectoryNode root, params string[] path)
+    {
+        DirectoryNode current = root;
+        foreach (string name in path)
+        {
+            DirectoryNode? next = current.Children.OfType<DirectoryNode>()
+                .FirstOrDefault(child => child.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (next is null) return null;
+            current = next;
+        }
+        return current;
     }
 
     private static string NormalizePath(string? path) =>
         (path ?? string.Empty).Replace('\\', '/').TrimStart('/').ToLowerInvariant();
 
-    private static void PatchPlayerDeliriumHazeMaterials(DirectoryNode root)
-    {
-        var epkDirectory = NavigateTo(root, "metadata", "effects", "spells", "monsters_effects",
-            "league_delirium", "deliriumobject", "epks") ??
-            throw new InvalidDataException("Could not find the PoE 2 Delirium player render-pass directory.");
-
-        string[] names = ["playeraffliction_epk_pass1.mat", "playeraffliction_epk_pass2.mat"];
-
-        var pendingWrites = new List<(FileNode File, string Patched)>();
-        foreach (string name in names)
-        {
-            var file = epkDirectory.Children.OfType<FileNode>().FirstOrDefault(node =>
-                node.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) ??
-                throw new InvalidDataException($"Could not find the PoE 2 Delirium haze material {name}.");
-
-            string current = Encoding.Unicode.GetString(file.Record.Read().ToArray()).TrimStart('\uFEFF');
-            int parametersFound = 0;
-            string patched = SetMaterialScalar(current, "AlbedoMulti", 0.0, ref parametersFound);
-            patched = SetMaterialScalar(patched, "Fog Haze Intensity", 0.0, ref parametersFound);
-            if (name.Contains("pass2", StringComparison.OrdinalIgnoreCase))
-                patched = SetMaterialScalar(patched, "Blur Intensity", 0.0, ref parametersFound);
-
-            int expected = name.Contains("pass2", StringComparison.OrdinalIgnoreCase) ? 3 : 2;
-            if (parametersFound != expected)
-                throw new InvalidDataException($"Expected {expected} Delirium overlay parameters in {name}, found {parametersFound}; no data was written.");
-            if (patched != current)
-                pendingWrites.Add((file, patched));
-        }
-
-        // Validate both materials before writing either one, preventing a layout
-        // change in a future game patch from leaving a half-applied overlay patch.
-        foreach (var pending in pendingWrites)
-        {
-            byte[] bytes = [.. Encoding.Unicode.GetPreamble(), .. Encoding.Unicode.GetBytes(pending.Patched)];
-            BackupManager.RecordOriginal(pending.File.Record);
-            pending.File.Record.Write(bytes);
-        }
-    }
-
-    internal static string SetMaterialScalar(string data, string parameterName, double value, ref int found)
-    {
-        string pattern = "(?s)(\\\"name\\\"\\s*:\\s*\\\"" + Regex.Escape(parameterName) +
-                         "\\\"\\s*,\\s*\\\"parameters\\\"\\s*:\\s*\\[\\s*\\{\\s*" +
-                         "\\\"value\\\"\\s*:\\s*)[-+0-9.eE]+";
-        var regex = new Regex(pattern, RegexOptions.IgnoreCase);
-        if (!regex.IsMatch(data)) return data;
-
-        found++;
-        string formatted = value.ToString("0.0###############", System.Globalization.CultureInfo.InvariantCulture);
-        return regex.Replace(data, "${1}" + formatted, 1);
-    }
-
-    private static void PatchEnvironmentSettings(DirectoryNode directory)
-    {
-        foreach (var node in directory.Children)
-        {
-            if (node is DirectoryNode subdirectory)
-            {
-                PatchEnvironmentSettings(subdirectory);
-                continue;
-            }
-
-            if (node is not FileNode file || !file.Name.EndsWith(".env", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var record = file.Record;
-            string path = (record.Path ?? string.Empty).Replace('\\', '/').ToLowerInvariant();
-            string data = Encoding.Unicode.GetString(record.Read().ToArray());
-            bool isDelirium = path.Contains("delirium", StringComparison.Ordinal) ||
-                              data.Contains("/Delirium/", StringComparison.OrdinalIgnoreCase) ||
-                              data.Contains("FourDelirium", StringComparison.OrdinalIgnoreCase);
-            if (!isDelirium) continue;
-
-            string patched = PatchEnvironmentText(data);
-
-            if (patched == data) continue;
-            BackupManager.RecordOriginal(record);
-            record.Write(Encoding.Unicode.GetBytes(patched));
-        }
-    }
-
-    internal static string PatchEnvironmentText(string data)
-    {
-        string patched = data
-                .Replace("\"fog\"", "\"xog\"")
-                .Replace("\"screenspace_fog\"", "\"xcreenspace_fog\"")
-                .Replace("\"effect_spawner\"", "\"xffect_spawner\"");
-
-        // Detach only explicitly named fog objects. Generic environment AOs may
-        // carry lighting and must remain connected.
-        patched = Regex.Replace(patched,
-            "(?i)(?<prefix>\"player_environment_ao\"\\s*:\\s*)\"(?<path>[^\"]*)\"",
-            match => Regex.IsMatch(match.Groups["path"].Value, "fog|mist|smoke|delirium", RegexOptions.IgnoreCase)
-                ? match.Groups["prefix"].Value + "\"\""
-                : match.Value);
-
-        return patched;
-    }
+    private sealed record PendingWrite(FileNode File, byte[] Bytes);
+    private sealed record SourceText(string Text, bool HasBom);
 }

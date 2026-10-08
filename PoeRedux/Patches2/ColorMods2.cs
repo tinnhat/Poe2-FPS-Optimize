@@ -1,7 +1,7 @@
 using LibBundle3.Nodes;
 using PoeRedux.Models;
+using System.IO;
 using System.Text;
-using System.Text.RegularExpressions;
 using PoeRedux.Services;
 
 namespace PoeRedux.Patches;
@@ -83,6 +83,8 @@ public class ColorMods2 : IPatch
         ModColorGroups.Defaults.ToDictionary(
             group => group.Name,
             group => $"rgb({group.R},{group.G},{group.B})", StringComparer.Ordinal);
+    public Dictionary<string, string> GroupTags { get; set; } = ModColorGroups.DefaultTags();
+    public bool TagPrefix { get; set; }
 
     private enum ReadState
     {
@@ -116,20 +118,21 @@ public class ColorMods2 : IPatch
         }
     }
 
-    private void TryPatchFile(FileNode file)
+    private bool TryPatchFile(FileNode file)
     {
         var record = file.Record;
         var bytes = record.Read();
         string data = Encoding.Unicode.GetString(bytes.ToArray());
 
         if (string.IsNullOrEmpty(data))
-            return;
+            return false;
 
         var lines = data.Split("\r\n").ToList();
 
         ReadState state = ReadState.ReadingToDescription;
 
         string? currentAnnotation = null;
+        string currentTag = string.Empty;
         bool? currentIsEnabled = null;
 
         int linesToWrite = 0;
@@ -162,6 +165,8 @@ public class ColorMods2 : IPatch
                     && GroupColors.TryGetValue(ModColorGroups.Normalize(option.Color), out string? annotation))
                 {
                     currentAnnotation = annotation;
+                    currentTag = GroupTags.TryGetValue(ModColorGroups.Normalize(option.Color), out var tag)
+                        ? tag : ModColorGroups.Normalize(option.Color);
                     currentIsEnabled = option.IsEnabled;
                     state = ReadState.ReadingData;
                 }
@@ -191,44 +196,8 @@ public class ColorMods2 : IPatch
 
             if (state == ReadState.WritingData)
             {
-                if (line.Contains('<')) // Already annotated.
-                {
-                    if (currentIsEnabled == false)
-                    {
-                        // Remove annotation.
-                        // <.*?>{{value}} -> "value".
-                        string pattern = "<.*?>{{(.*?)}}";
-                        string replacement = Regex.Replace(line, pattern, new MatchEvaluator(match =>
-                        {
-                            return $"{match.Groups[1].Value}";
-                        }));
-                        lines[i] = replacement;
-                    }
-                    else
-                    {
-                        // Replace text between brackets with new annotation.
-                        string pattern = "<.*?>";
-                        string replacement = Regex.Replace(line, pattern, new MatchEvaluator(match =>
-                        {
-                            return $"<{currentAnnotation}>";
-                        }));
-                        lines[i] = replacement;
-                    }
-                }
-                else
-                {
-                    // Surround the value with the annotation.
-                    // "value" -> "<annotation>{{value}}".
-                    if (currentIsEnabled == true)
-                    {
-                        string pattern = "\".*?\"";
-                        string replacement = Regex.Replace(line, pattern, new MatchEvaluator(match =>
-                        {
-                            return $"\"<{currentAnnotation}>{{{{{match.Value.Replace("\"", "")}}}}}\"";
-                        }));
-                        lines[i] = replacement;
-                    }
-                }
+                lines[i] = ModTextStyler.Restyle(
+                    line, currentAnnotation, currentTag, currentIsEnabled == true, TagPrefix);
 
                 linesToWrite--;
                 if (linesToWrite == 0)
@@ -240,6 +209,8 @@ public class ColorMods2 : IPatch
         }
 
         var newData = string.Join("\r\n", lines);
+        if (newData == data)
+            return false;
         var newBytes = Encoding.Unicode.GetBytes(newData);
         if (!newBytes.AsSpan().StartsWith(Encoding.Unicode.GetPreamble()))
         {
@@ -247,6 +218,7 @@ public class ColorMods2 : IPatch
         }
         BackupManager.RecordOriginal(record);
         record.Write(newBytes);
+        return true;
     }
 
     private bool HasTargetExtension(string fileName) =>
@@ -268,12 +240,14 @@ public class ColorMods2 : IPatch
     public void Apply(DirectoryNode root)
     {
         var dir = NavigateTo(root, "data", "statdescriptions");
-        if (dir is not null)
-            CollectFileNodesRecursively(dir);
+        if (dir is null)
+            throw new InvalidDataException("data/statdescriptions was not found in the game files.");
+        fileNodes.Clear();
+        CollectFileNodesRecursively(dir);
 
+        int changed = 0;
         foreach (var file in fileNodes)
-        {
-            TryPatchFile(file);
-        }
+            if (TryPatchFile(file)) changed++;
+        _ = changed; // Re-applying the same readability style is a valid no-op.
     }
 }

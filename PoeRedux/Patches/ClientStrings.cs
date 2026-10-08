@@ -27,7 +27,7 @@ public class ClientStrings : IPatch
 
     public void Apply(DirectoryNode root)
     {
-        var data = NavigateTo(root, "data");
+        var data = NavigateTo(root, "data", "balance");
         var table = data?.Children.OfType<FileNode>().FirstOrDefault(f => f.Name == "clientstrings.datc64");
         if (table is null)
             throw new InvalidDataException($"Could not find {ClientStringsTable.Path}; no tooltip text was changed.");

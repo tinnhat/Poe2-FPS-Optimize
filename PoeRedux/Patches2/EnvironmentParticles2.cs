@@ -8,8 +8,8 @@ namespace PoeRedux.Patches;
 
 public sealed class EnvironmentParticles2 : IPatch, IConfigurablePatch
 {
-    public string Name => "Weather FX Patch";
-    public object Description => "Reduces rain and clouds while preserving environment effect spawners, lighting, fog attachments, and post-processing.";
+    public string Name => "Reduce Rain & Clouds";
+    public object Description => "Reduces rain and clouds while preserving fog, environment objects, lighting, and post-processing.";
     public IList<PatchOption> Options { get; } =
     [
         new("rain", "Rain"),
@@ -33,7 +33,8 @@ public sealed class EnvironmentParticles2 : IPatch, IConfigurablePatch
             throw new InvalidDataException("No supported PoE 2 environment settings were found; the game data layout may have changed.");
     }
 
-    private static void PatchDirectory(DirectoryNode directory, bool rain, bool clouds, ref int candidates, ref int changed)
+    private static void PatchDirectory(DirectoryNode directory, bool rain, bool clouds,
+        ref int candidates, ref int changed)
     {
         foreach (var node in directory.Children)
         {

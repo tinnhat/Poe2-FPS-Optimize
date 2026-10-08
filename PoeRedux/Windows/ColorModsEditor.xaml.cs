@@ -13,12 +13,13 @@ public partial class ColorModsEditor : Window
     private readonly ObservableCollection<ColorGroupViewModel> _groups;
 
     public ColorModsEditor(ObservableCollection<ColorModsViewModel> colorMods,
-        ObservableCollection<ColorGroupViewModel> groups)
+        ObservableCollection<ColorGroupViewModel> groups, bool tagPrefix)
     {
         _groups = groups;
         InitializeComponent();
         ColorModsItemsControl.ItemsSource = colorMods;
         ColorGroupsItemsControl.ItemsSource = groups;
+        TagPrefixCheckBox.IsChecked = tagPrefix;
         ApplyLocalization();
         SourceInitialized += (s, e) => ApplyDarkTitleBar();
     }
@@ -29,6 +30,7 @@ public partial class ColorModsEditor : Window
         EditorTitleText.Text = LocalizationService.Text("ColorEditorTitle");
         EditorDescriptionText.Text = LocalizationService.Text("ColorEditorDescription");
         GroupsTitleText.Text = LocalizationService.Text("ColorGroupsTitle");
+        TagPrefixCheckBox.Content = LocalizationService.Text("ColorTagPrefix");
         SaveConfigButton.Content = LocalizationService.Text("SaveConfig");
         LoadConfigButton.Content = LocalizationService.Text("LoadConfig");
         SaveButton.Content = LocalizationService.Text("Save");
@@ -160,9 +162,9 @@ public partial class ColorModsEditor : Window
     }
 
     public static bool Show(ObservableCollection<ColorModsViewModel> colorMods,
-        ObservableCollection<ColorGroupViewModel> groups)
+        ObservableCollection<ColorGroupViewModel> groups, bool tagPrefix, out bool updatedTagPrefix)
     {
-        var dialog = new ColorModsEditor(colorMods, groups);
+        var dialog = new ColorModsEditor(colorMods, groups, tagPrefix);
 
         if (Application.Current.MainWindow != null)
         {
@@ -170,6 +172,8 @@ public partial class ColorModsEditor : Window
             dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
         }
 
-        return dialog.ShowDialog() == true;
+        bool saved = dialog.ShowDialog() == true;
+        updatedTagPrefix = saved ? dialog.TagPrefixCheckBox.IsChecked == true : tagPrefix;
+        return saved;
     }
 }

@@ -12,7 +12,7 @@ namespace PoeRedux.Services;
 /// </summary>
 public static class ClientStringsTable
 {
-    public const string Path = "data/clientstrings.datc64";
+    public const string Path = "data/balance/clientstrings.datc64";
     private const int IdColumnOffset = 0;
     private const int TextColumnOffset = 8;
 

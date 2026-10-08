@@ -33,6 +33,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                <CheckBox x:Name="TagPrefixCheckBox" Margin="4,10,4,0" Foreground="{StaticResource TextPrimary}"/>
             </StackPanel>
         </Border>
 

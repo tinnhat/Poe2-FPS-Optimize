@@ -9,6 +9,7 @@ public static class BackupManager
     private static readonly object _lock = new();
     private static ZipArchive? _zip;
     private static HashSet<string>? _knownPaths;
+    private static Dictionary<string, ZipArchiveEntry>? _entries;
 
     public static string GetBackupFilePath()
     {
@@ -40,12 +41,16 @@ public static class BackupManager
 
             var path = GetBackupFilePath();
             _knownPaths = new HashSet<string>(StringComparer.Ordinal);
+            _entries = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
 
             try
             {
                 _zip = ZipFile.Open(path, ZipArchiveMode.Update);
                 foreach (var entry in _zip.Entries)
+                {
                     _knownPaths.Add(entry.FullName);
+                    _entries[entry.FullName] = entry;
+                }
             }
             catch
             {
@@ -54,6 +59,7 @@ public static class BackupManager
                 _zip = null;
                 try { File.Delete(path); } catch { /* best effort */ }
                 _knownPaths.Clear();
+                _entries.Clear();
                 _zip = ZipFile.Open(path, ZipArchiveMode.Update);
             }
         }
@@ -76,6 +82,7 @@ public static class BackupManager
             var originalBytes = record.Read();
 
             var entry = _zip.CreateEntry(path, CompressionLevel.Optimal);
+            _entries![path] = entry;
             using var es = entry.Open();
             es.Write(originalBytes.Span);
         }
@@ -88,12 +95,10 @@ public static class BackupManager
 
         lock (_lock)
         {
-            if (_zip == null || _knownPaths == null)
+            if (_zip == null || _knownPaths == null || _entries == null)
                 throw new InvalidOperationException("Backup archive is not open; refusing to restore game data.");
 
-            var entry = _zip.Entries.FirstOrDefault(item =>
-                item.FullName.Equals(recordPath, StringComparison.OrdinalIgnoreCase));
-            if (entry is null)
+            if (!_entries.TryGetValue(recordPath, out ZipArchiveEntry? entry))
             {
                 originalBytes = [];
                 return false;
@@ -114,6 +119,7 @@ public static class BackupManager
             _zip?.Dispose();
             _zip = null;
             _knownPaths = null;
+            _entries = null;
         }
     }
 
